@@ -32,7 +32,7 @@ namespace PosSystem.Api.Controllers
             db.StockMovements.Add(stockMovement);
             await db.SaveChangesAsync();
             var response = StockMovementResponse.FromEntity(stockMovement);
-            return Created((string?)null, response);
+            return CreatedAtAction(nameof(GetMovements),new {productId=stockMovement.ProductId}, response);
         }
         [HttpPost("adjustments")]
         public async Task<ActionResult<StockMovementResponse>> AdjustStock(CreateStockAdjustmentRequest request)
@@ -62,7 +62,7 @@ namespace PosSystem.Api.Controllers
             db.StockMovements.Add(stockMovement);
             await db.SaveChangesAsync();
             var response = StockMovementResponse.FromEntity(stockMovement);
-            return Created((string?)null, response);
+            return CreatedAtAction(nameof(GetMovements), new { productId = stockMovement.ProductId }, response);
         }
         [HttpGet("/api/products/{productId:int}/movements")]
         public async Task<ActionResult<List<StockMovementResponse>>> GetMovements(int productId)
