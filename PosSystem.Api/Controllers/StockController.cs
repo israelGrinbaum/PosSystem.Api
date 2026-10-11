@@ -76,5 +76,21 @@ namespace PosSystem.Api.Controllers
                 .ToListAsync();
             return movements;
         }
+        [HttpGet("/api/invetory")]
+        public async Task<ActionResult<List<InventoryItemResponse>>> GetInventory()
+        {
+            var invetory = await db.Products
+                .Where(p => p.IsActive)
+                .OrderBy(p => p.Name)
+                .Select(p => new InventoryItemResponse(
+                    p.Id,
+                    p.Sku,
+                    p.Name,
+                    db.StockMovements
+                        .Where(m => m.ProductId == p.Id)
+                        .Sum(m => m.Quantity)))
+                .ToListAsync();
+            return invetory;
+        }
     }
 }
