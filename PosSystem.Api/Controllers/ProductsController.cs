@@ -45,5 +45,22 @@ namespace PosSystem.Api.Controllers
             if(product is null) return NotFound();
             return product;
         }
+        [HttpPut("{id:int}")]
+        public async Task<ActionResult<Product>> Update (int id, UpdateProductRequest request)
+        {
+            if (await db.Products.AnyAsync(p => p.Sku == request.Sku & p.Id!=id))
+            {
+                return Problem(
+                    detail: $"Product with SKU '{request.Sku}' already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            var product = await db.Products.FindAsync(id);
+            if (product is null) return NotFound();
+            product.Sku = request.Sku;
+            product.Name = request.Name;
+            product.Price = request.Price;
+            await db.SaveChangesAsync();
+            return product;
+        }
     }
 }
