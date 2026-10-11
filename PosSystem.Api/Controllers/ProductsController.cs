@@ -19,6 +19,13 @@ namespace PosSystem.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<Product>> Create(CreateProductRequest request)
         {
+            if (await db.Products.AnyAsync(p => p.Sku == request.Sku))
+            {
+                return Problem(
+                    detail: $"Product with SKU '{request.Sku}' already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
             var product = new Product
             {
                 Sku = request.Sku,
@@ -29,7 +36,14 @@ namespace PosSystem.Api.Controllers
             };
             db.Products.Add(product);
             await db.SaveChangesAsync();
-            return Created($"/api/products/{product.Id}", product);
+            return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+        }
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult<Product>> GetById(int id)
+        {
+            var product = await db.Products.FindAsync(id);
+            if(product is null) return NotFound();
+            return product;
         }
     }
 }
