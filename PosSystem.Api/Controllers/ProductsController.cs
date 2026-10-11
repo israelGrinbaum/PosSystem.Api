@@ -12,9 +12,14 @@ namespace PosSystem.Api.Controllers
     public class ProductsController(PosDbContext db) : ControllerBase
     {
         [HttpGet]
-        public async Task<ActionResult<List<Product>>> GetAll()
+        public async Task<ActionResult<List<Product>>> GetAll(string? search)
         {
-            return await db.Products.Where(p => p.IsActive).ToListAsync();
+            var query = db.Products.Where(p => p.IsActive);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(p => p.Name.Contains(search.Trim()) || p.Sku.Contains(search.Trim()));
+            }
+            return await query.OrderBy(p => p.Name).ToListAsync();
         }
         [HttpPost]
         public async Task<ActionResult<Product>> Create(CreateProductRequest request)
