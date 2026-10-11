@@ -41,5 +41,42 @@ namespace PosSystem.Api.Controllers
             );
             return Created((string?)null, response);
         }
+        [HttpPost("adjustments")]
+        public async Task<ActionResult<StockMovementResponse>> AdjustStock(CreateStockAdjustmentRequest request)
+        {
+            if (request.Quantity == 0)
+            {
+                ModelState.AddModelError(nameof(request.Quantity), "Quantity cannot be zero.");
+                return ValidationProblem(ModelState);
+            }
+            var product = await db.Products.FindAsync(request.ProductId);
+            if (product == null) return NotFound();
+            if (!product.IsActive)
+            {
+                return Problem(
+                    detail: $"Product '{product.Name}' is not active.",
+                    statusCode: StatusCodes.Status409Conflict
+                );
+            }
+            StockMovement stockMovement = new StockMovement
+            {
+                ProductId = request.ProductId,
+                Quantity = request.Quantity,
+                Type = StockMovementType.Adjustment,
+                Reason = request.Reason.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+            db.StockMovements.Add(stockMovement);
+            await db.SaveChangesAsync();
+            StockMovementResponse response = new StockMovementResponse(
+                stockMovement.Id,
+                stockMovement.ProductId,
+                stockMovement.Quantity,
+                stockMovement.Type,
+                stockMovement.Reason,
+                stockMovement.CreatedAt
+            );
+            return Created((string?)null, response);
+        }
     }
 }
