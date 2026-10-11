@@ -11,14 +11,14 @@ namespace PosSystem.Api.Controllers
     public class StockController(PosDbContext db) : ControllerBase
     {
         [HttpPost("receipts")]
-        public async Task<ActionResult<StockMovement>> ReceiveStock(CreateStockReceiptRequest request)
+        public async Task<ActionResult<StockMovementResponse>> ReceiveStock(CreateStockReceiptRequest request)
         {
             var product = await db.Products.FindAsync(request.ProductId);
             if (product == null) return NotFound();
             if (!product.IsActive)
             {
                 return Problem(
-                    detail: $"Product '{request.ProductId}' is not active.",
+                    detail: $"Product '{product.Name}' is not active.",
                     statusCode: StatusCodes.Status409Conflict
                 );
             }
@@ -31,7 +31,15 @@ namespace PosSystem.Api.Controllers
             };
             db.StockMovements.Add(stockMovement);
             await db.SaveChangesAsync();
-            return Created($"/api/products/{stockMovement.Id}", stockMovement);
+            StockMovementResponse response = new StockMovementResponse(
+                stockMovement.Id,
+                stockMovement.ProductId,
+                stockMovement.Quantity,
+                stockMovement.Type,
+                stockMovement.Reason,
+                stockMovement.CreatedAt
+            );
+            return Created((string?)null, response);
         }
     }
 }
