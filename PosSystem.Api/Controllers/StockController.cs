@@ -31,14 +31,7 @@ namespace PosSystem.Api.Controllers
             };
             db.StockMovements.Add(stockMovement);
             await db.SaveChangesAsync();
-            StockMovementResponse response = new StockMovementResponse(
-                stockMovement.Id,
-                stockMovement.ProductId,
-                stockMovement.Quantity,
-                stockMovement.Type,
-                stockMovement.Reason,
-                stockMovement.CreatedAt
-            );
+            var response = StockMovementResponse.FromEntity(stockMovement);
             return Created((string?)null, response);
         }
         [HttpPost("adjustments")]
@@ -68,14 +61,7 @@ namespace PosSystem.Api.Controllers
             };
             db.StockMovements.Add(stockMovement);
             await db.SaveChangesAsync();
-            StockMovementResponse response = new StockMovementResponse(
-                stockMovement.Id,
-                stockMovement.ProductId,
-                stockMovement.Quantity,
-                stockMovement.Type,
-                stockMovement.Reason,
-                stockMovement.CreatedAt
-            );
+            var response = StockMovementResponse.FromEntity(stockMovement);
             return Created((string?)null, response);
         }
     }
