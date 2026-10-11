@@ -64,5 +64,17 @@ namespace PosSystem.Api.Controllers
             var response = StockMovementResponse.FromEntity(stockMovement);
             return Created((string?)null, response);
         }
+        [HttpGet("/api/products/{productId:int}/movements")]
+        public async Task<ActionResult<List<StockMovementResponse>>> GetMovements(int productId)
+        {
+            if (!await db.Products.AnyAsync(p => p.Id == productId)) return NotFound();
+            var movements = await db.StockMovements
+                .Where(m => m.ProductId == productId)
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Select(m => StockMovementResponse.FromEntity(m))
+                .ToListAsync();
+            return movements;
+        }
     }
 }
