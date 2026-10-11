@@ -44,10 +44,22 @@ namespace PosSystem.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
         }
         [HttpGet("{id:int}")]
-        public async Task<ActionResult<Product>> GetById(int id)
+        public async Task<ActionResult<ProductDetailsResponse>> GetById(int id)
         {
-            var product = await db.Products.FindAsync(id);
-            if(product is null) return NotFound();
+            var product = await db.Products
+                .Where(p => p.Id == id)
+                .Select(p => new ProductDetailsResponse(
+                    p.Id,
+                    p.Sku,
+                    p.Name,
+                    p.Price,
+                    p.IsActive,
+                    p.CreatedAt,
+                    db.StockMovements
+                        .Where(m => m.ProductId == p.Id)
+                        .Sum(m => m.Quantity)))
+                .FirstOrDefaultAsync();
+            if (product is null) return NotFound();
             return product;
         }
         [HttpPut("{id:int}")]
