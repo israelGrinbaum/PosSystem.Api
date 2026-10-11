@@ -27,5 +27,11 @@ namespace PosSystem.Api.Data
                       .OnDelete(DeleteBehavior.Restrict);
             });
         }
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder
+                .Properties<DateTime>()
+                .HaveConversion<UtcDateTimeConverter>();
+        }
     }
 }
