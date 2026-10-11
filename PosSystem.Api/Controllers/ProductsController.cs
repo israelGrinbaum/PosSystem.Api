@@ -12,17 +12,17 @@ namespace PosSystem.Api.Controllers
     public class ProductsController(PosDbContext db) : ControllerBase
     {
         [HttpGet]
-        public async Task<ActionResult<List<Product>>> GetAll(string? search)
+        public async Task<ActionResult<List<ProductResponse>>> GetAll(string? search)
         {
             var query = db.Products.Where(p => p.IsActive);
             if (!string.IsNullOrWhiteSpace(search))
             {
                 query = query.Where(p => p.Name.Contains(search.Trim()) || p.Sku.Contains(search.Trim()));
             }
-            return await query.OrderBy(p => p.Name).ToListAsync();
+            return await query.OrderBy(p => p.Name).Select(p => ProductResponse.FromEntity(p)).ToListAsync();
         }
         [HttpPost]
-        public async Task<ActionResult<Product>> Create(CreateProductRequest request)
+        public async Task<ActionResult<ProductResponse>> Create(CreateProductRequest request)
         {
             if (await db.Products.AnyAsync(p => p.Sku == request.Sku))
             {
@@ -41,7 +41,8 @@ namespace PosSystem.Api.Controllers
             };
             db.Products.Add(product);
             await db.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+            var response = ProductResponse.FromEntity(product);
+            return CreatedAtAction(nameof(GetById), new { id = product.Id }, response);
         }
         [HttpGet("{id:int}")]
         public async Task<ActionResult<ProductDetailsResponse>> GetById(int id)
@@ -63,7 +64,7 @@ namespace PosSystem.Api.Controllers
             return product;
         }
         [HttpPut("{id:int}")]
-        public async Task<ActionResult<Product>> Update (int id, UpdateProductRequest request)
+        public async Task<ActionResult<ProductResponse>> Update(int id, UpdateProductRequest request)
         {
             var product = await db.Products.FindAsync(id);
             if (product is null) return NotFound();
@@ -77,10 +78,11 @@ namespace PosSystem.Api.Controllers
             product.Name = request.Name;
             product.Price = request.Price;
             await db.SaveChangesAsync();
-            return product;
+            var response = ProductResponse.FromEntity(product);
+            return response;
         }
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Deactivate (int id)
+        public async Task<IActionResult> Deactivate(int id)
         {
             var product = await db.Products.FindAsync(id);
             if (product is null) return NotFound();
