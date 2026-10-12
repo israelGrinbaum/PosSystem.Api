@@ -9,5 +9,7 @@
         public StockMovementType Type { get; set; }
         public string? Reason { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int? SaleId { get; set; }
+        public Sale? Sale { get; set; }
     }
 }
