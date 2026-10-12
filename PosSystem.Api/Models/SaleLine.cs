@@ -2,7 +2,7 @@
 {
     public class SaleLine
     {
-        public int id { get; set; }
+        public int Id { get; set; }
         public int SaleId { get; set; }
         public int ProductId { get; set; }
         public string ProductName { get; set; } = string.Empty;
