@@ -39,6 +39,31 @@ namespace PosSystem.Api.Controllers
                 return Ok(SaleResponse.FromEntity(existingSale));
             }
 
+            var productIds = request.Lines.Select(line => line.ProductId).Distinct().ToList();
+            var products = await db.Products
+                .AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id);
+            var missingIds = productIds
+                .Where(id => !products.ContainsKey(id)).ToList();
+            if (missingIds.Count > 0)
+            {
+                return Problem(
+                    detail: $"Products not found: {string.Join(", ", missingIds)}.",
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            var inactiveNames = products.Values
+                .Where(p => !p.IsActive)
+                .Select(p => p.Name)
+                .ToList();
+            if (inactiveNames.Count > 0)
+            {
+                return Problem(
+                    detail: $"Products not active: {string.Join(", ", inactiveNames)}.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
             return Problem(detail: "Not implemented yet", statusCode: 501);
         }
     }
