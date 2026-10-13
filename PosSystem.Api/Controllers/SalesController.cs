@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PosSystem.Api.Data;
 using PosSystem.Api.Dtos;
@@ -16,18 +17,28 @@ namespace PosSystem.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<SaleResponse>> CreateSale(CreateSaleRequest request)
         {
-            if(request.IdempotencyKey == Guid.Empty)
+            if (request.IdempotencyKey == Guid.Empty)
             {
                 ModelState.AddModelError(nameof(request.IdempotencyKey), "Idempotency key is required.");
             }
-            if(request.PaymentMethod == PaymentMethod.Cash && request.AmountPaid is null)
+            if (request.PaymentMethod == PaymentMethod.Cash && request.AmountPaid is null)
             {
                 ModelState.AddModelError(nameof(request.AmountPaid), "AmountPaid is required for cash payments.");
             }
-            if(!ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
                 return ValidationProblem(ModelState);
             }
+
+            var idempotencyKey = request.IdempotencyKey!.Value;
+            var existingSale = await db.Sales.AsNoTracking()
+                .Include(s => s.Lines.OrderBy(sl => sl.Id))
+                .SingleOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey);
+            if (existingSale is not null)
+            {
+                return Ok(SaleResponse.FromEntity(existingSale));
+            }
+
             return Problem(detail: "Not implemented yet", statusCode: 501);
         }
     }
