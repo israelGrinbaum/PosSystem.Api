@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PosSystem.Api.Data;
+using PosSystem.Api.Settings;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,11 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddDbContext<PosDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+
+builder.Services.AddOptions<VatOptions>()
+    .Bind(builder.Configuration.GetSection(VatOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 var app = builder.Build();
 
