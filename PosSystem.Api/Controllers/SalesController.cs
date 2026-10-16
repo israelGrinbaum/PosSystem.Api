@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PosSystem.Api.Data;
@@ -178,6 +179,47 @@ namespace PosSystem.Api.Controllers
             }
 
             return Ok(SaleResponse.FromEntity(sale));
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<SaleSummaryResponse>>> GetSales(
+            [FromQuery] DateTimeOffset? from,
+            [FromQuery] DateTimeOffset? to)
+        {
+            if (!from.HasValue)
+            {
+                ModelState.AddModelError(nameof(from), "From date is required.");
+            }
+            if (!to.HasValue)
+            {
+                ModelState.AddModelError(nameof(to), "To date is required.");
+            }
+            if (from >= to)
+            {
+                ModelState.AddModelError(nameof(from), "From date must be earlier than To date.");
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return ValidationProblem(ModelState);
+            }
+
+            var fromUtc = from!.Value.UtcDateTime;
+            var toUtc = to!.Value.UtcDateTime;
+
+            var sales = await db.Sales.AsNoTracking()
+                .Where(s => s.CreatedAt >= fromUtc && s.CreatedAt < toUtc)
+                .OrderByDescending(s => s.CreatedAt)
+                .ThenByDescending(s => s.Id)
+                .Select(s => new SaleSummaryResponse(
+                    Id: s.Id,
+                    ReceiptNumber: s.ReceiptNumber,
+                    CreatedAt: s.CreatedAt,
+                    Total: s.Total,
+                    PaymentMethod: s.PaymentMethod))
+                .ToListAsync();
+
+            return Ok(sales);
         }
     }
 }
