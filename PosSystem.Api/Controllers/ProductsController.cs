@@ -40,7 +40,16 @@ namespace PosSystem.Api.Controllers
                 CreatedAt = DateTime.UtcNow
             };
             db.Products.Add(product);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.ProductSku))
+            {
+                return Problem(
+                    detail: $"Product with SKU '{request.Sku}' already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
             var response = ProductResponse.FromEntity(product);
             return CreatedAtAction(nameof(GetById), new { id = product.Id }, response);
         }
@@ -77,7 +86,16 @@ namespace PosSystem.Api.Controllers
             product.Sku = request.Sku;
             product.Name = request.Name;
             product.Price = request.Price;
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.ProductSku))
+            {
+                return Problem(
+                    detail: $"Product with SKU '{request.Sku}' already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
             var response = ProductResponse.FromEntity(product);
             return response;
         }
