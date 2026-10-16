@@ -14,6 +14,9 @@ namespace PosSystem.Api.Controllers
     {
         private readonly decimal _vatRate = vatOptions.Value.Rate;
 
+        // Matches HasPrecision(10,2) on Sale.Total. Update both together.
+        private const decimal MaxSaleTotal = 99_999_999.99m;
+
         [HttpPost]
         public async Task<ActionResult<SaleResponse>> CreateSale(CreateSaleRequest request)
         {
@@ -64,7 +67,67 @@ namespace PosSystem.Api.Controllers
                     statusCode: StatusCodes.Status409Conflict);
             }
 
-            return Problem(detail: "Not implemented yet", statusCode: 501);
+            var requestedQuantities = request.Lines
+                .GroupBy(line => line.ProductId)
+                .ToDictionary(g => g.Key, g => g.Sum(line => line.Quantity));
+
+            var currentStock = await db.StockMovements
+                .Where(sm => productIds.Contains(sm.ProductId))
+                .GroupBy(sm => sm.ProductId)
+                .Select(g => new { ProductId = g.Key, Stock = g.Sum(sm => sm.Quantity) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.Stock);
+
+            var shortages = new List<string>();
+            foreach (var (productId, requested) in requestedQuantities)
+            {
+                var available = currentStock.GetValueOrDefault(productId);
+                if (available < requested)
+                {
+                    shortages.Add($"{products[productId].Name} (requested {requested}, available {available})");
+                }
+            }
+            if (shortages.Count > 0)
+            {
+                return Problem(
+                    detail: $"Insufficient stock: {string.Join(", ", shortages)}.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var saleLines = new List<SaleLine>();
+            foreach(var line in request.Lines)
+            {
+                var product = products[line.ProductId];
+                saleLines.Add(new SaleLine
+                {
+                    ProductId = line.ProductId,
+                    ProductName = product.Name,
+                    Quantity = line.Quantity,
+                    UnitPrice = product.Price,
+                    LineTotal = product.Price * line.Quantity
+                });
+            }
+
+            var total = saleLines.Sum(sl => sl.LineTotal);
+            if(total > MaxSaleTotal)
+            {
+                return Problem(
+                    detail: $"Sale total exceeds maximum allowed value of {MaxSaleTotal}.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            var vatAmount = Math.Round(total * _vatRate / (1 + _vatRate), 2, MidpointRounding.AwayFromZero);
+
+            var amountPaid = request.PaymentMethod == PaymentMethod.Cash ? request.AmountPaid!.Value : total;
+
+            if (request.PaymentMethod == PaymentMethod.Cash && amountPaid < total)
+            {
+                ModelState.AddModelError(nameof(request.AmountPaid), $"Amount paid ({amountPaid}) is less than total sale amount ({total}).");
+                return ValidationProblem(ModelState);
+            }
+
+            var change = amountPaid - total;
+
+            return Problem(detail: $"Not implemented yet Total {total}, VAT {vatAmount}, paid {amountPaid}, change {change}", statusCode: 501);
         }
     }
 }
