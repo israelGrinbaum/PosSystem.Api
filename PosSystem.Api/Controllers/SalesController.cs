@@ -94,7 +94,7 @@ namespace PosSystem.Api.Controllers
             }
 
             var saleLines = new List<SaleLine>();
-            foreach(var line in request.Lines)
+            foreach (var line in request.Lines)
             {
                 var product = products[line.ProductId];
                 saleLines.Add(new SaleLine
@@ -108,7 +108,7 @@ namespace PosSystem.Api.Controllers
             }
 
             var total = saleLines.Sum(sl => sl.LineTotal);
-            if(total > MaxSaleTotal)
+            if (total > MaxSaleTotal)
             {
                 return Problem(
                     detail: $"Sale total exceeds maximum allowed value of {MaxSaleTotal}.",
@@ -127,7 +127,57 @@ namespace PosSystem.Api.Controllers
 
             var change = amountPaid - total;
 
-            return Problem(detail: $"Not implemented yet Total {total}, VAT {vatAmount}, paid {amountPaid}, change {change}", statusCode: 501);
+            var lastReceiptNumber = await db.Sales.MaxAsync(s => (int?)s.ReceiptNumber) ?? 0;
+
+            var now = DateTime.UtcNow;
+
+            var sale = new Sale
+            {
+                AmountPaid = amountPaid,
+                ReceiptNumber = lastReceiptNumber + 1,
+                PaymentMethod = request.PaymentMethod!.Value,
+                VatRate = _vatRate,
+                VatAmount = vatAmount,
+                Change = change,
+                Total = total,
+                Lines = saleLines,
+                CreatedAt = now,
+                IdempotencyKey = idempotencyKey,
+            };
+
+            var stockMovements = new List<StockMovement>();
+            foreach (var sl in saleLines)
+            {
+                stockMovements.Add(new StockMovement
+                {
+                    ProductId = sl.ProductId,
+                    Quantity = -sl.Quantity,
+                    Type = StockMovementType.Sale,
+                    Sale = sale,
+                    CreatedAt = now
+                });
+            }
+
+            db.Sales.Add(sale);
+            db.StockMovements.AddRange(stockMovements);
+            await db.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetSale), new { id = sale.Id }, SaleResponse.FromEntity(sale));
+        }
+
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult<SaleResponse>> GetSale(int id)
+        {
+            var sale = await db.Sales.AsNoTracking()
+                .Include(s => s.Lines.OrderBy(sl => sl.Id))
+                .SingleOrDefaultAsync(s => s.Id == id);
+
+            if (sale is null)
+            {
+                return NotFound();
+            }
+
+            return Ok(SaleResponse.FromEntity(sale));
         }
     }
 }
