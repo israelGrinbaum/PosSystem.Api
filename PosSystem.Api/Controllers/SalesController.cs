@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PosSystem.Api.Data;
@@ -35,9 +34,7 @@ namespace PosSystem.Api.Controllers
             }
 
             var idempotencyKey = request.IdempotencyKey!.Value;
-            var existingSale = await db.Sales.AsNoTracking()
-                .Include(s => s.Lines.OrderBy(sl => sl.Id))
-                .SingleOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey);
+            var existingSale = await FindByIdempotencyKeyAsync(idempotencyKey);
             if (existingSale is not null)
             {
                 return Ok(SaleResponse.FromEntity(existingSale));
@@ -161,7 +158,27 @@ namespace PosSystem.Api.Controllers
 
             db.Sales.Add(sale);
             db.StockMovements.AddRange(stockMovements);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.SaleIdempotencyKey))
+            {
+                var concurrentSale = await FindByIdempotencyKeyAsync(idempotencyKey);
+                if (concurrentSale is null)
+                {
+                    return Problem(
+                        detail: "A concurrent sale with this key could not be loaded. Please retry with the same idempotency key.",
+                        statusCode: StatusCodes.Status409Conflict);
+                }
+                return Ok(SaleResponse.FromEntity(concurrentSale));
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.SaleReceiptNumber))
+            {
+                return Problem(
+                    detail: "A concurrent sale took the same receipt number. Please retry with the same idempotency key.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
 
             return CreatedAtAction(nameof(GetSale), new { id = sale.Id }, SaleResponse.FromEntity(sale));
         }
@@ -221,5 +238,9 @@ namespace PosSystem.Api.Controllers
 
             return Ok(sales);
         }
+        private Task<Sale?> FindByIdempotencyKeyAsync(Guid idempotencyKey) =>
+            db.Sales.AsNoTracking()
+                .Include(s => s.Lines.OrderBy(sl => sl.Id))
+                .SingleOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey);
     }
 }
