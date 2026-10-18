@@ -1,4 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PosSystem.Api.Data;
+using PosSystem.Api.Models;
+using PosSystem.Api.Services;
+using PosSystem.Api.Settings;
 using PosSystem.Api.Tests.Infrastructure;
 
 namespace PosSystem.Api.Tests.Services
@@ -6,19 +11,120 @@ namespace PosSystem.Api.Tests.Services
     [Collection("Database")]
     public class SaleServiceTests(DatabaseFixture fixture) : IAsyncLifetime
     {
+        private const decimal VatRate = 0.18m;
+
         public async Task InitializeAsync()
         {
             await fixture.ResetAsync();
         }
+
         public Task DisposeAsync()
         {
             return Task.CompletedTask;
         }
+
         [Fact]
-        public async Task Database_StartsEmpty()
+        public async Task CreateSaleAsync_InsufficientStock_ReturnsConflictAndSavesNothing()
         {
-            using var db = fixture.CreateContext();
-            Assert.False(await db.Products.AnyAsync());
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 4);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 5)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Conflict, result.Status);
+            Assert.Contains("requested 5, available 4", result.ErrorDetail);
+
+            await using var assertDb = fixture.CreateContext();
+            Assert.False(await assertDb.Sales.AnyAsync());
+            Assert.Equal(1, await assertDb.StockMovements.CountAsync());
         }
+
+        [Fact]
+        public async Task CreateSaleAsync_DuplicateLinesExceedStock_ReturnsConflict()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 4);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 3), new SaleLineInput(productId, 3)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Conflict, result.Status);
+            Assert.Contains("requested 6, available 4", result.ErrorDetail);
+
+            await using var assertDb = fixture.CreateContext();
+            Assert.False(await assertDb.Sales.AnyAsync());
+            Assert.Equal(1, await assertDb.StockMovements.CountAsync());
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_QuantityEqualsStock_CreatesSale()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 4);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 4)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            Assert.Equal(1, await assertDb.Sales.CountAsync());
+            Assert.Equal(0, await assertDb.StockMovements
+                .Where(sm => sm.ProductId == productId)
+                .SumAsync(sm => sm.Quantity));
+        }
+
+        private async Task<int> SeedProductAsync(string name, decimal price, int stock)
+        {
+            await using var db = fixture.CreateContext();
+            var product = new Product
+            {
+                Name = name,
+                Price = price,
+                Sku = $"SKU-{Guid.NewGuid():N}",
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.Products.Add(product);
+            if (stock > 0)
+            {
+                db.StockMovements.Add(new StockMovement
+                {
+                    Product = product,
+                    Quantity = stock,
+                    Type = StockMovementType.Receipt,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+            await db.SaveChangesAsync();
+            return product.Id;
+        }
+
+        private static SaleService CreateService(PosDbContext db) =>
+            new(db, Options.Create(new VatOptions { Rate = VatRate }));
     }
 }
