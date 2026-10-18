@@ -178,6 +178,81 @@ namespace PosSystem.Api.Tests.Services
             Assert.Equal(0.05m, sale.VatAmount);
         }
 
+        [Fact]
+        public async Task CreateSaleAsync_CashOverpaid_CalculatesChange()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Cash,
+                AmountPaid: 10.00m,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            var sale = await assertDb.Sales.SingleAsync();
+
+            Assert.Equal(10.00m, sale.AmountPaid);
+            Assert.Equal(3.10m, sale.Change);
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_CashExactAmount_NoChange()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Cash,
+                AmountPaid: 6.90m,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            var sale = await assertDb.Sales.SingleAsync();
+            Assert.Equal(0.00m, sale.Change);
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_CashUnderpaid_ReturnsValidationAndSavesNothing()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Cash,
+                AmountPaid: 6.89m,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Validation, result.Status);
+            Assert.Equal(nameof(CreateSaleCommand.AmountPaid), result.ErrorField);
+
+            await using var assertDb = fixture.CreateContext();
+
+            Assert.False(await assertDb.Sales.AnyAsync());
+        }
+
         private async Task<int> SeedProductAsync(string name, decimal price, int stock)
         {
             await using var db = fixture.CreateContext();
