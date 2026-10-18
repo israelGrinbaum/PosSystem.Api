@@ -1,22 +1,17 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using PosSystem.Api.Data;
 using PosSystem.Api.Dtos;
 using PosSystem.Api.Models;
-using PosSystem.Api.Settings;
+using PosSystem.Api.Services;
+using System.Diagnostics;
 
 namespace PosSystem.Api.Controllers
 {
     [ApiController]
     [Route("api/sales")]
-    public class SalesController(PosDbContext db, IOptions<VatOptions> vatOptions) : ControllerBase
+    public class SalesController(PosDbContext db, ISaleService saleService) : ControllerBase
     {
-        private readonly decimal _vatRate = vatOptions.Value.Rate;
-
-        // Matches HasPrecision(10,2) on Sale.Total. Update both together.
-        private const decimal MaxSaleTotal = 99_999_999.99m;
-
         [HttpPost]
         public async Task<ActionResult<SaleResponse>> CreateSale(CreateSaleRequest request)
         {
@@ -33,154 +28,25 @@ namespace PosSystem.Api.Controllers
                 return ValidationProblem(ModelState);
             }
 
-            var idempotencyKey = request.IdempotencyKey!.Value;
-            var existingSale = await FindByIdempotencyKeyAsync(idempotencyKey);
-            if (existingSale is not null)
+            var command = new CreateSaleCommand(
+                Lines: request.Lines.Select(line => new SaleLineInput(
+                    ProductId: line.ProductId,
+                    Quantity: line.Quantity)).ToList(),
+                PaymentMethod: request.PaymentMethod!.Value,
+                AmountPaid: request.AmountPaid,
+                IdempotencyKey: request.IdempotencyKey!.Value);
+            var result = await saleService.CreateSaleAsync(command);
+
+            if (!result.IsSuccess)
             {
-                return Ok(SaleResponse.FromEntity(existingSale));
+                return MapError(result);
+            }
+            if (result.Status == CreateSaleStatus.AlreadyExists)
+            {
+                return Ok(SaleResponse.FromEntity(result.Sale));
             }
 
-            var productIds = request.Lines.Select(line => line.ProductId).Distinct().ToList();
-            var products = await db.Products
-                .AsNoTracking()
-                .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id);
-            var missingIds = productIds
-                .Where(id => !products.ContainsKey(id)).ToList();
-            if (missingIds.Count > 0)
-            {
-                return Problem(
-                    detail: $"Products not found: {string.Join(", ", missingIds)}.",
-                    statusCode: StatusCodes.Status404NotFound);
-            }
-
-            var inactiveNames = products.Values
-                .Where(p => !p.IsActive)
-                .Select(p => p.Name)
-                .ToList();
-            if (inactiveNames.Count > 0)
-            {
-                return Problem(
-                    detail: $"Products not active: {string.Join(", ", inactiveNames)}.",
-                    statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var requestedQuantities = request.Lines
-                .GroupBy(line => line.ProductId)
-                .ToDictionary(g => g.Key, g => g.Sum(line => line.Quantity));
-
-            var currentStock = await db.StockMovements
-                .Where(sm => productIds.Contains(sm.ProductId))
-                .GroupBy(sm => sm.ProductId)
-                .Select(g => new { ProductId = g.Key, Stock = g.Sum(sm => sm.Quantity) })
-                .ToDictionaryAsync(x => x.ProductId, x => x.Stock);
-
-            var shortages = new List<string>();
-            foreach (var (productId, requested) in requestedQuantities)
-            {
-                var available = currentStock.GetValueOrDefault(productId);
-                if (available < requested)
-                {
-                    shortages.Add($"{products[productId].Name} (requested {requested}, available {available})");
-                }
-            }
-            if (shortages.Count > 0)
-            {
-                return Problem(
-                    detail: $"Insufficient stock: {string.Join(", ", shortages)}.",
-                    statusCode: StatusCodes.Status409Conflict);
-            }
-
-            var saleLines = new List<SaleLine>();
-            foreach (var line in request.Lines)
-            {
-                var product = products[line.ProductId];
-                saleLines.Add(new SaleLine
-                {
-                    ProductId = line.ProductId,
-                    ProductName = product.Name,
-                    Quantity = line.Quantity,
-                    UnitPrice = product.Price,
-                    LineTotal = product.Price * line.Quantity
-                });
-            }
-
-            var total = saleLines.Sum(sl => sl.LineTotal);
-            if (total > MaxSaleTotal)
-            {
-                return Problem(
-                    detail: $"Sale total exceeds maximum allowed value of {MaxSaleTotal}.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            var vatAmount = Math.Round(total * _vatRate / (1 + _vatRate), 2, MidpointRounding.AwayFromZero);
-
-            var amountPaid = request.PaymentMethod == PaymentMethod.Cash ? request.AmountPaid!.Value : total;
-
-            if (request.PaymentMethod == PaymentMethod.Cash && amountPaid < total)
-            {
-                ModelState.AddModelError(nameof(request.AmountPaid), $"Amount paid ({amountPaid}) is less than total sale amount ({total}).");
-                return ValidationProblem(ModelState);
-            }
-
-            var change = amountPaid - total;
-
-            var lastReceiptNumber = await db.Sales.MaxAsync(s => (int?)s.ReceiptNumber) ?? 0;
-
-            var now = DateTime.UtcNow;
-
-            var sale = new Sale
-            {
-                AmountPaid = amountPaid,
-                ReceiptNumber = lastReceiptNumber + 1,
-                PaymentMethod = request.PaymentMethod!.Value,
-                VatRate = _vatRate,
-                VatAmount = vatAmount,
-                Change = change,
-                Total = total,
-                Lines = saleLines,
-                CreatedAt = now,
-                IdempotencyKey = idempotencyKey,
-            };
-
-            var stockMovements = new List<StockMovement>();
-            foreach (var sl in saleLines)
-            {
-                stockMovements.Add(new StockMovement
-                {
-                    ProductId = sl.ProductId,
-                    Quantity = -sl.Quantity,
-                    Type = StockMovementType.Sale,
-                    Sale = sale,
-                    CreatedAt = now
-                });
-            }
-
-            db.Sales.Add(sale);
-            db.StockMovements.AddRange(stockMovements);
-            try
-            {
-                await db.SaveChangesAsync();
-            }
-            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.SaleIdempotencyKey))
-            {
-                var concurrentSale = await FindByIdempotencyKeyAsync(idempotencyKey);
-                if (concurrentSale is null)
-                {
-                    return Problem(
-                        detail: "A concurrent sale with this key could not be loaded. Please retry with the same idempotency key.",
-                        statusCode: StatusCodes.Status409Conflict);
-                }
-                return Ok(SaleResponse.FromEntity(concurrentSale));
-            }
-            catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.SaleReceiptNumber))
-            {
-                return Problem(
-                    detail: "A concurrent sale took the same receipt number. Please retry with the same idempotency key.",
-                    statusCode: StatusCodes.Status409Conflict);
-            }
-
-            return CreatedAtAction(nameof(GetSale), new { id = sale.Id }, SaleResponse.FromEntity(sale));
+            return CreatedAtAction(nameof(GetSale), new { id = result.Sale.Id }, SaleResponse.FromEntity(result.Sale));
         }
 
         [HttpGet("{id:int}")]
@@ -238,9 +104,35 @@ namespace PosSystem.Api.Controllers
 
             return Ok(sales);
         }
-        private Task<Sale?> FindByIdempotencyKeyAsync(Guid idempotencyKey) =>
-            db.Sales.AsNoTracking()
-                .Include(s => s.Lines.OrderBy(sl => sl.Id))
-                .SingleOrDefaultAsync(s => s.IdempotencyKey == idempotencyKey);
+
+        private ActionResult<SaleResponse> MapError(CreateSaleResult result)
+        {
+            if (result.IsSuccess)
+            {
+                throw new UnreachableException();
+            }
+            switch (result.Status)
+            {
+                case CreateSaleStatus.NotFound:
+                    return Problem(
+                        detail: result.ErrorDetail,
+                        statusCode: StatusCodes.Status404NotFound);
+                case CreateSaleStatus.Conflict:
+                    return Problem(
+                        detail: result.ErrorDetail,
+                        statusCode: StatusCodes.Status409Conflict);
+                case CreateSaleStatus.Validation:
+                    if (result.ErrorField is not null)
+                    {
+                        ModelState.AddModelError(result.ErrorField, result.ErrorDetail);
+                        return ValidationProblem(ModelState);
+                    }
+                    return Problem(
+                        detail: result.ErrorDetail,
+                        statusCode: StatusCodes.Status400BadRequest);
+                default:
+                    throw new UnreachableException();
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PosSystem.Api.Data;
+using PosSystem.Api.Services;
 using PosSystem.Api.Settings;
 using System.Text.Json.Serialization;
 
@@ -13,6 +14,8 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddDbContext<PosDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+
+builder.Services.AddScoped<ISaleService, SaleService>();
 
 builder.Services.AddOptions<VatOptions>()
     .Bind(builder.Configuration.GetSection(VatOptions.SectionName))
