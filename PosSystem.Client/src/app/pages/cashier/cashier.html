@@ -1,1 +1,39 @@
-<p>cashier works!</p>
+<div class="cashier">
+  <section class="search-area">
+    <label for="product-search" class="search-label">חיפוש מוצר</label>
+    <input
+      id="product-search"
+      class="search-input"
+      type="search"
+      placeholder="שם מוצר או מק״ט"
+      autocomplete="off"
+      [value]="query()"
+      (input)="onSearchInput($event)"
+    />
+
+    @if (results().length > 0) {
+      <table class="results">
+        <thead>
+          <tr>
+            <th scope="col">מוצר</th>
+            <th scope="col">מק״ט</th>
+            <th scope="col" class="num">מחיר</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (product of results(); track product.id) {
+            <tr>
+              <td>{{ product.name }}</td>
+              <td class="mono">{{ product.sku }}</td>
+              <td class="num mono">{{ product.price | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <aside class="cart" aria-label="סל קניות">
+    <p class="empty">הסל ריק</p>
+  </aside>
+</div>
