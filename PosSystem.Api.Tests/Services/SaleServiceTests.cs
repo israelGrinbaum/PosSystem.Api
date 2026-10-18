@@ -99,6 +99,85 @@ namespace PosSystem.Api.Tests.Services
                 .SumAsync(sm => sm.Quantity));
         }
 
+        [Fact]
+        public async Task CreateSaleAsync_CardSale_ExtractsVatAndIgnoresAmountPaid()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 118.00m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: 500m,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            var sale = await assertDb.Sales.SingleAsync();
+
+            Assert.Equal(118.00m, sale.Total);
+            Assert.Equal(18.00m, sale.VatAmount);
+            Assert.Equal(0.18m, sale.VatRate);
+            Assert.Equal(118.00m, sale.AmountPaid);
+            Assert.Equal(0.00m, sale.Change);
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_VatWithRepeatingDecimal_RoundsToAgorot()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 10.00m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            var sale = await assertDb.Sales.SingleAsync();
+
+            Assert.Equal(1.53m, sale.VatAmount);
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_VatAtMidpoint_RoundsAwayFromZero()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 0.12m, stock: 1);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb, vatRate: 0.6m).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.Created, result.Status);
+
+            await using var assertDb = fixture.CreateContext();
+            var sale = await assertDb.Sales.SingleAsync();
+
+            Assert.Equal(0.05m, sale.VatAmount);
+        }
+
         private async Task<int> SeedProductAsync(string name, decimal price, int stock)
         {
             await using var db = fixture.CreateContext();
@@ -124,7 +203,7 @@ namespace PosSystem.Api.Tests.Services
             return product.Id;
         }
 
-        private static SaleService CreateService(PosDbContext db) =>
-            new(db, Options.Create(new VatOptions { Rate = VatRate }));
+        private static SaleService CreateService(PosDbContext db, decimal vatRate = VatRate) =>
+            new(db, Options.Create(new VatOptions { Rate = vatRate }));
     }
 }
