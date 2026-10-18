@@ -1,0 +1,44 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.rail {
+  flex: 0 0 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 24px 12px;
+  background: var(--color-ink);
+  color: var(--color-paper);
+
+  a {
+    display: flex;
+    justify-content: center;
+    padding: 12px 4px;
+    border-radius: var(--radius-control);
+    color: var(--color-paper);
+    text-decoration: none;
+    font-size: 14px;
+
+    &.active {
+      background: var(--color-marker);
+      color: var(--color-ink);
+      font-weight: 600;
+    }
+  }
+}
+
+.store-name {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+  padding: 0 8px 20px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #3a4a54;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
