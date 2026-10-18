@@ -19,7 +19,7 @@ namespace PosSystem.Api.Tests.Infrastructure
 
         public async Task ResetAsync()
         {
-            using var db = CreateContext();
+            await using var db = CreateContext();
             await db.StockMovements.ExecuteDeleteAsync();
             await db.SaleLines.ExecuteDeleteAsync();
             await db.Sales.ExecuteDeleteAsync();
