@@ -1,11 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.10.12224.181 stable
+VisualStudioVersion = 18.10.12224.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PosSystem.Api", "PosSystem.Api\PosSystem.Api.csproj", "{B91A8C7A-D3F8-44EC-BF96-B33F30A12942}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PosSystem.Api.Tests", "..\PosSystem.Api.Tests\PosSystem.Api.Tests.csproj", "{10BD81E7-F11B-4412-AA31-C5EBD1B7102C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PosSystem.Api.Tests", "PosSystem.Api.Tests\PosSystem.Api.Tests.csproj", "{7FA2D881-3E7C-6F98-F59D-4A8F4456B12C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +17,10 @@ Global
 		{B91A8C7A-D3F8-44EC-BF96-B33F30A12942}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B91A8C7A-D3F8-44EC-BF96-B33F30A12942}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B91A8C7A-D3F8-44EC-BF96-B33F30A12942}.Release|Any CPU.Build.0 = Release|Any CPU
-		{10BD81E7-F11B-4412-AA31-C5EBD1B7102C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{10BD81E7-F11B-4412-AA31-C5EBD1B7102C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{10BD81E7-F11B-4412-AA31-C5EBD1B7102C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{10BD81E7-F11B-4412-AA31-C5EBD1B7102C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7FA2D881-3E7C-6F98-F59D-4A8F4456B12C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7FA2D881-3E7C-6F98-F59D-4A8F4456B12C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7FA2D881-3E7C-6F98-F59D-4A8F4456B12C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7FA2D881-3E7C-6F98-F59D-4A8F4456B12C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
