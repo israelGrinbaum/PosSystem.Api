@@ -1,1 +1,47 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+  --color-counter: #e2e7e5;
+  --color-counter-line: #cbd3d0;
+  --color-ink: #18262f;
+  --color-ink-soft: #4e5d66;
+  --color-paper: #ffffff;
+  --color-rule: #8c989e;
+  --color-marker: #ffe04a;
+  --color-alert: #b0172d;
+
+  --font-ui: 'IBM Plex Sans Hebrew', 'Segoe UI', Tahoma, sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+
+  --radius-control: 6px;
+  --radius-panel: 8px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-counter);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: 1px solid var(--color-ink);
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  padding: 1px 7px;
+}
