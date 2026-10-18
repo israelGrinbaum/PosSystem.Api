@@ -249,8 +249,40 @@ namespace PosSystem.Api.Tests.Services
             Assert.Equal(nameof(CreateSaleCommand.AmountPaid), result.ErrorField);
 
             await using var assertDb = fixture.CreateContext();
-
             Assert.False(await assertDb.Sales.AnyAsync());
+        }
+
+        [Fact]
+        public async Task CreateSaleAsync_SameIdempotencyKeyTwice_ReturnsExistingSale()
+        {
+            // Arrange
+            var productId = await SeedProductAsync("Milk", 6.90m, stock: 5);
+
+            var command = new CreateSaleCommand(
+                Lines: [new SaleLineInput(productId, 1)],
+                PaymentMethod: PaymentMethod.Card,
+                AmountPaid: null,
+                IdempotencyKey: Guid.NewGuid());
+
+            await using var arrangeDb = fixture.CreateContext();
+            var firstResult = await CreateService(arrangeDb).CreateSaleAsync(command);
+            Assert.Equal(CreateSaleStatus.Created, firstResult.Status);
+            var firstSaleId = firstResult.Sale!.Id;
+
+            // Act
+            await using var actDb = fixture.CreateContext();
+            var result = await CreateService(actDb).CreateSaleAsync(command);
+
+            // Assert
+            Assert.Equal(CreateSaleStatus.AlreadyExists, result.Status);
+            Assert.True(result.IsSuccess);
+            Assert.Equal(firstSaleId, result.Sale.Id);
+
+            await using var assertDb = fixture.CreateContext();
+            Assert.Equal(1, await assertDb.Sales.CountAsync());
+            Assert.Equal(4, await assertDb.StockMovements
+                .Where(sm => sm.ProductId == productId)
+                .SumAsync(sm => sm.Quantity));
         }
 
         private async Task<int> SeedProductAsync(string name, decimal price, int stock)
