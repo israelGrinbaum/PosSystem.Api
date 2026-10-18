@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using PosSystem.Api.Data;
-using PosSystem.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using PosSystem.Api.Data;
 using PosSystem.Api.Dtos;
+using PosSystem.Api.Models;
 
 namespace PosSystem.Api.Controllers
 {
@@ -19,16 +19,14 @@ namespace PosSystem.Api.Controllers
             {
                 query = query.Where(p => p.Name.Contains(search.Trim()) || p.Sku.Contains(search.Trim()));
             }
-            return await query.OrderBy(p => p.Name).Select(p => ProductResponse.FromEntity(p)).ToListAsync();
+            return Ok(await query.OrderBy(p => p.Name).Select(p => ProductResponse.FromEntity(p)).ToListAsync());
         }
         [HttpPost]
         public async Task<ActionResult<ProductResponse>> Create(CreateProductRequest request)
         {
             if (await db.Products.AnyAsync(p => p.Sku == request.Sku))
             {
-                return Problem(
-                    detail: $"Product with SKU '{request.Sku}' already exists.",
-                    statusCode: StatusCodes.Status409Conflict);
+                return DuplicateSkuProblem(request.Sku);
             }
 
             var product = new Product
@@ -46,9 +44,7 @@ namespace PosSystem.Api.Controllers
             }
             catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.ProductSku))
             {
-                return Problem(
-                    detail: $"Product with SKU '{request.Sku}' already exists.",
-                    statusCode: StatusCodes.Status409Conflict);
+                return DuplicateSkuProblem(request.Sku);
             }
             var response = ProductResponse.FromEntity(product);
             return CreatedAtAction(nameof(GetById), new { id = product.Id }, response);
@@ -70,7 +66,7 @@ namespace PosSystem.Api.Controllers
                         .Sum(m => m.Quantity)))
                 .FirstOrDefaultAsync();
             if (product is null) return NotFound();
-            return product;
+            return Ok(product);
         }
         [HttpPut("{id:int}")]
         public async Task<ActionResult<ProductResponse>> Update(int id, UpdateProductRequest request)
@@ -79,9 +75,7 @@ namespace PosSystem.Api.Controllers
             if (product is null) return NotFound();
             if (await db.Products.AnyAsync(p => p.Sku == request.Sku && p.Id != id))
             {
-                return Problem(
-                    detail: $"Product with SKU '{request.Sku}' already exists.",
-                    statusCode: StatusCodes.Status409Conflict);
+                return DuplicateSkuProblem(request.Sku);
             }
             product.Sku = request.Sku;
             product.Name = request.Name;
@@ -92,12 +86,10 @@ namespace PosSystem.Api.Controllers
             }
             catch (DbUpdateException ex) when (ex.IsUniqueViolation(DbIndexNames.ProductSku))
             {
-                return Problem(
-                    detail: $"Product with SKU '{request.Sku}' already exists.",
-                    statusCode: StatusCodes.Status409Conflict);
+                return DuplicateSkuProblem(request.Sku);
             }
             var response = ProductResponse.FromEntity(product);
-            return response;
+            return Ok(response);
         }
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Deactivate(int id)
@@ -108,5 +100,10 @@ namespace PosSystem.Api.Controllers
             await db.SaveChangesAsync();
             return NoContent();
         }
+
+        private ObjectResult DuplicateSkuProblem(string sku) =>
+            Problem(
+                detail: $"Product with SKU '{sku}' already exists.",
+                statusCode: StatusCodes.Status409Conflict);
     }
 }
