@@ -4,6 +4,7 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 import { Product } from '../../models/product';
 import { ProductsApi } from '../../services/products-api';
+import { CartStore } from '../../services/cart-store';
 
 @Component({
   selector: 'app-cashier',
@@ -13,6 +14,8 @@ import { ProductsApi } from '../../services/products-api';
 })
 export class Cashier {
   private readonly productsApi = inject(ProductsApi);
+
+  protected readonly cart = inject(CartStore);
 
   protected readonly query = signal('');
 
