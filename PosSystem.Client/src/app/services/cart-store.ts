@@ -1,6 +1,7 @@
 import { computed, Service, signal } from '@angular/core';
 import { CartLine } from '../models/cart-line';
 import { Product } from '../models/product';
+import { CreateSaleLineRequest } from '../models/sale';
 
 @Service()
 export class CartStore {
@@ -13,6 +14,10 @@ export class CartStore {
       0,
     );
   });
+
+  readonly saleLines = computed<CreateSaleLineRequest[]>(() =>
+    this.state().map((line) => ({ productId: line.productId, quantity: line.quantity })),
+  );
 
   readonly isEmpty = computed(() => {
     return this.state().length === 0;
