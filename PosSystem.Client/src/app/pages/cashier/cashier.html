@@ -27,7 +27,10 @@
               <td>{{ product.name }}</td>
               <td class="mono">{{ product.sku }}</td>
               <td class="num mono">{{ product.price | number: '1.2-2' }}</td>
-              <td class="num"><button type="button" class="add-button" (click)="cart.add(product)">הוספה</button></td>            </tr>
+              <td class="num">
+                <button type="button" class="add-button" (click)="cart.add(product)">הוספה</button>
+              </td>
+            </tr>
           }
         </tbody>
       </table>
@@ -35,22 +38,83 @@
   </section>
 
   <aside class="cart" aria-label="סל קניות">
-    @if (cart.isEmpty()) {
-      <p class="empty">הסל ריק</p>
-    } @else {
-      <ul class="cart-lines">
-        @for (line of cart.lines(); track line.productId) {
-          <li>
-            <span>{{ line.productName }}</span>
-            <span class="mono">
-              {{ line.quantity }} × {{ (line.productPriceAsAgorot / 100) | number: '1.2-2' }}
-            </span>
-          </li>
-        }
-      </ul>
-      <p class="cart-total">
-        לתשלום <span class="mono">{{ cart.totalAgorot() / 100 | number: '1.2-2' }}</span>
-      </p>
+    <div class="receipt">
+      <div class="receipt-header">
+        <div class="store-name">[שם החנות]</div>
+        <div class="receipt-status">לפני תשלום, טרם הונפקה קבלה</div>
+      </div>
+
+      @if (cart.isEmpty()) {
+        <p class="empty">הסל ריק</p>
+      } @else {
+        <ul class="cart-lines">
+          @for (line of cart.lines(); track line.productId) {
+            @let lineTotal = line.productPriceAsAgorot * line.quantity;
+            <li class="cart-line">
+              <div class="line-main">
+                <span class="line-name">{{ line.productName }}</span>
+                <span class="mono">{{ lineTotal / 100 | number: '1.2-2' }}</span>
+              </div>
+              <div class="line-controls">
+                <div class="stepper">
+                  <button
+                    type="button"
+                    [attr.aria-label]="'הוספת יחידה ל' + line.productName"
+                    (click)="cart.increment(line.productId)"
+                  >
+                    +
+                  </button>
+                  <span class="mono qty">{{ line.quantity }}</span>
+                  <button
+                    type="button"
+                    [disabled]="line.quantity === 1"
+                    [attr.aria-label]="'הורדת יחידה ל' + line.productName"
+                    (click)="cart.decrement(line.productId)"
+                  >
+                    −
+                  </button>
+                </div>
+                <span class="mono" dir="ltr">
+                  × {{ line.productPriceAsAgorot / 100 | number: '1.2-2' }}
+                </span>
+                <button
+                  type="button"
+                  class="remove"
+                  [attr.aria-label]="'הסרת ' + line.productName + ' מהסל'"
+                  (click)="cart.remove(line.productId)"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.75"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+
+        <div class="receipt-total">
+          <span>לתשלום</span>
+          <span class="amount">
+            <span class="currency">₪</span>
+            <span class="mono" dir="ltr">{{ cart.totalAgorot() / 100 | number: '1.2-2' }}</span>
+          </span>
+        </div>
+      }
+    </div>
+
+    @if (!cart.isEmpty()) {
+      <div class="cart-actions">
+        <button type="button" class="clear-button" (click)="cart.clear()">ניקוי סל</button>
+      </div>
     }
   </aside>
 </div>
